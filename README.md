@@ -1,5 +1,6 @@
 ```python
 
+
 import os
 import re
 from collections import defaultdict, deque
@@ -98,13 +99,29 @@ def find_component_path_in_routes(component_name, dir):
 
         if os.path.isfile(file_path) and file.endswith('-routing.module.ts'):
             with open(file_path, 'r') as f:
-                content = f.read()
-                # Updated regex for class references
-                pattern = r'path:\s*[\'"]([^\'"]+)[\'"]\s*,\s*component:\s*' + component_name + r'\b'
-                match = re.search(pattern, content)
-                print "match {} ".format(match)
-                if match:
-                    return match.group(1)
+                list_started = False
+                path_dict = {}
+                for line in f:
+                    if list_started:
+                        trimmed_line = line.strip()
+                        if trimmed_line.startswith('{'):
+                            path_dict = {}
+                        elif trimmed_line.startswith('path:'):
+                            regex = r'^path:\s*[\'"](.*)[\'"]\s*,$'
+                            match = re.search(regex, line)
+                            path_dict['path'] = match.group(1)
+                        elif trimmed_line.startswith('component:'):
+                            print('test')
+                        elif trimmed_line.startswith('}'):
+                            print(path_dict)
+                    else:
+                        trimmed_line = line.strip()
+                        if trimmed_line.endswith('['):
+                            list_started = True
+                # content = f.read()
+                # pattern = r'path:\s*[\'"]([^\'"]+)[\'"]\s*,\s*component:\s*' + component_name + r'\b'
+                # match = re.search(pattern, content)
+                # print "match {} ".format(match)
         elif os.path.isdir(file_path):
             result = find_component_path_in_routes(component_name, file_path)
             if result:
@@ -180,6 +197,5 @@ if final_results:
         print '\n--------------------------------------------------------------\n'
 else:
     print 'No apiService calls found.'
-
 
 ```
