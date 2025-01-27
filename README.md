@@ -1,7 +1,5 @@
 ```python
 
-
-
 import os
 import re
 from collections import defaultdict, deque
@@ -12,6 +10,24 @@ def find_component_selector(file_path):
         content = f.read()
     match = re.search(r'@Component\(\{[^}]*selector:\s*[\'"]([^\'"]+)[\'"]', content)
     return match.group(1) if match else None
+
+def track_method_usages_v2(original_method_details, dir):
+    method_details = original_method_details.copy()
+    end_components = set()
+    flag = True
+    component_selectors = method_details.keys()
+    
+    while flag:
+        component_usages = search_selector_in_html(dir, component_selectors, True)
+        used_component_selectors = component_usages.keys()
+        for selector in component_selectors:
+            if used_component_selectors.__contains__(selector):
+                usages = component_usages[selector]
+                new_selectors = []
+                for usage in usages:
+                    print(usage)
+            else:
+                end_components.add(method_details[selector]['file'])
 
 # Recursive function to track method usage to the end component/page
 def track_method_usages(method_details, method_usages, target_method, angular_dir):
@@ -42,20 +58,29 @@ def track_method_usages(method_details, method_usages, target_method, angular_di
     return end_components
 
 # Function to search for a selector in HTML files, optionally recursive
-def search_selector_in_html(dir, selector, recursive=False):
+def search_selector_in_html(dir, selectors, recursive=False):
     files = os.listdir(dir)
+    selector_usages = {}
     for file in files:
         file_path = os.path.join(dir, file)
 
         if os.path.isfile(file_path) and file_path.endswith('.html'):
             with open(file_path, 'r') as f:
                 content = f.read()
-                if re.search(r'<{}\b'.format(re.escape(selector)), content):
-                    return True
+                for selector in selectors:
+                    if re.search(r'<{}\b'.format(re.escape(selector)), content):
+                        if selector_usages.__contains__(selector):
+                            selector_usages[selector].append(file_path)
+                        else:
+                            selector_usages[selector] = [].append(file_path)
         elif os.path.isdir(file_path) and recursive:
-            if search_selector_in_html(file_path, selector, recursive):
-                return True
-    return False
+            internal_selector_usages = search_selector_in_html(file_path, selectors, recursive)
+            for key, value in internal_selector_usages.items():
+                if selector_usages.__contains__(key):
+                    selector_usages[key].append(value)
+                else:
+                    selector_usages[key] = value
+    return selector_usages
 
 # Function to find variable values within a class
 def find_variable_value_in_class(content, variable_name):
@@ -146,6 +171,7 @@ def search_in_files(dir):
             with open(file_path, 'r') as f:
                 content = f.read()
 
+            selector = find_component_selector(file_path)
             methods = find_api_methods(content)
             for method, http_method, _, url in methods:
                 url = re.sub(r'\${this\.(\w+)}',
@@ -157,7 +183,11 @@ def search_in_files(dir):
                     'http_method': http_method,
                     'url': url,
                 })
-                method_details[method] = {'file': file_path, 'url': url}
+                if method_details.__contains__(selector):
+                    method_details[selector]['method'].append(method)
+                    method_details[selector]['url'].append(url)
+                else:
+                    method_details[selector] = {'file': file_path, 'url': [].append(url), 'method': [].append(method)}
 
         elif os.path.isdir(file_path):
             nested_results, nested_method_details = search_in_files(file_path)
@@ -177,36 +207,37 @@ paths_dict = find_component_paths_in_routes(angular_dir)
 
 not_found_components = []
 
-for method, details in method_details.items():
-    end_components = track_method_usages(method_details, method_usages, method, angular_dir)
-    component_results = []
-
-    for component_file, status in end_components:
-        if status == "PAGE":
-            component_name_match = re.search(r'export\s+class\s+(\w+)\s+', open(component_file).read())
-            component_name = component_name_match.group(1) if component_name_match else None
-            if component_name and paths_dict.__contains__(component_name):
-                route_path = paths_dict[component_name]
-                component_results.append((component_name, route_path))
-            else:
-                not_found_components.append(component_name)
-
-    final_results[method] = {
-        'url': details['url'],
-        'components': component_results
-    }
+# for method, details in method_details.items():
+#     end_components = track_method_usages(method_details, method_usages, method, angular_dir)
+#     component_results = []
+# 
+#     for component_file, status in end_components:
+#         if status == "PAGE":
+#             component_name_match = re.search(r'export\s+class\s+(\w+)\s+', open(component_file).read())
+#             component_name = component_name_match.group(1) if component_name_match else None
+#             if component_name and paths_dict.__contains__(component_name):
+#                 route_path = paths_dict[component_name]
+#                 component_results.append((component_name, route_path))
+#             else:
+#                 not_found_components.append(component_name)
+# 
+#     final_results[method] = {
+#         'url': details['url'],
+#         'components': component_results
+#     }
+end_components = track_method_usages_v2(method_details, angular_dir)
 
 # Display results
 if final_results:
     for method, details in final_results.items():
-        print "URL: {}".format(details['url'])
-        print "USAGE:"
+        print("URL: {}".format(details['url']))
+        print("USAGE:")
         for component, path in details['components']:
-            print "  component: {}".format(component)
-            print "  path: \"{}\"".format(path)
-        print '\n--------------------------------------------------------------\n'
+            print("  component: {}".format(component))
+            print("  path: \"{}\"".format(path))
+        print('\n--------------------------------------------------------------\n')
 else:
-    print 'No apiService calls found.'
+    print('No apiService calls found.')
 
 print('----------------------------------')
 print('Components That Are Not Found')
