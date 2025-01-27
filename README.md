@@ -1,6 +1,7 @@
 ```python
 
 
+
 import os
 import re
 from collections import defaultdict, deque
@@ -16,7 +17,7 @@ def find_component_selector(file_path):
 def track_method_usages(method_details, method_usages, target_method, angular_dir):
     end_components = set()
     queue = deque([{'method': target_method, 'file': method_details[target_method]['file']}])
-
+    print('target_method : {} '.format(target_method))
     while queue:
         current = queue.popleft()
         current_method = current['method']
@@ -121,7 +122,8 @@ def find_component_paths_in_routes(dir):
                             else:
                                 print('RIDI')
                         elif trimmed_line.startswith('}'):
-                            result[path_dict['component']] = path_dict['path']
+                            if path_dict.__contains__('component'):
+                                result[path_dict['component']] = path_dict['path']
                         elif trimmed_line.startswith(']'):
                             break
                     elif trimmed_line.endswith('['):
@@ -173,6 +175,8 @@ method_usages = find_method_usages(angular_dir, method_details.keys())
 final_results = {}
 paths_dict = find_component_paths_in_routes(angular_dir)
 
+not_found_components = []
+
 for method, details in method_details.items():
     end_components = track_method_usages(method_details, method_usages, method, angular_dir)
     component_results = []
@@ -181,14 +185,35 @@ for method, details in method_details.items():
         if status == "PAGE":
             component_name_match = re.search(r'export\s+class\s+(\w+)\s+', open(component_file).read())
             component_name = component_name_match.group(1) if component_name_match else None
-            if component_name:
+            if component_name and paths_dict.__contains__(component_name):
                 route_path = paths_dict[component_name]
                 component_results.append((component_name, route_path))
+            else:
+                not_found_components.append(component_name)
 
     final_results[method] = {
         'url': details['url'],
         'components': component_results
     }
+
+# Display results
+if final_results:
+    for method, details in final_results.items():
+        print "URL: {}".format(details['url'])
+        print "USAGE:"
+        for component, path in details['components']:
+            print "  component: {}".format(component)
+            print "  path: \"{}\"".format(path)
+        print '\n--------------------------------------------------------------\n'
+else:
+    print 'No apiService calls found.'
+
+print('----------------------------------')
+print('Components That Are Not Found')
+print('----------------------------------')
+for component in not_found_components:
+    print(component)
+
 
 
 ```
