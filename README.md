@@ -91,42 +91,45 @@ def find_method_usages(dir, method_names):
 
     return method_usage
 
-# Function to find component path in route module files
-def find_component_path_in_routes(component_name, dir):
+def find_component_paths_in_routes(dir):
+    result = {}
     files = os.listdir(dir)
     for file in files:
         file_path = os.path.join(dir, file)
+        path_regex = r'path:\s*[\'"](.*)[\'"],?'
+        component_regex = r'component:\s*([A-Za-z]*),?'
 
         if os.path.isfile(file_path) and file.endswith('-routing.module.ts'):
-            with open(file_path, 'r') as f:
+            with open(file_path) as f:
                 list_started = False
                 path_dict = {}
                 for line in f:
+                    trimmed_line = line.strip()
                     if list_started:
-                        trimmed_line = line.strip()
                         if trimmed_line.startswith('{'):
                             path_dict = {}
-                        elif trimmed_line.startswith('path:'):
-                            regex = r'^path:\s*[\'"](.*)[\'"]\s*,$'
-                            match = re.search(regex, line)
-                            path_dict['path'] = match.group(1)
-                        elif trimmed_line.startswith('component:'):
-                            print('test')
+                        elif 'path:' in trimmed_line:
+                            match = re.search(path_regex, trimmed_line)
+                            if match:
+                                path_dict['path'] = match.group(1)
+                            else:
+                                print('RIDI')
+                        elif 'component:' in trimmed_line:
+                            match = re.search(component_regex, trimmed_line)
+                            if match:
+                                path_dict['component'] = match.group(1)
+                            else:
+                                print('RIDI')
                         elif trimmed_line.startswith('}'):
-                            print(path_dict)
-                    else:
-                        trimmed_line = line.strip()
-                        if trimmed_line.endswith('['):
-                            list_started = True
-                # content = f.read()
-                # pattern = r'path:\s*[\'"]([^\'"]+)[\'"]\s*,\s*component:\s*' + component_name + r'\b'
-                # match = re.search(pattern, content)
-                # print "match {} ".format(match)
+                            result[path_dict['component']] = path_dict['path']
+                        elif trimmed_line.startswith(']'):
+                            break
+                    elif trimmed_line.endswith('['):
+                        list_started = True
         elif os.path.isdir(file_path):
-            result = find_component_path_in_routes(component_name, file_path)
-            if result:
-                return result
-    return None
+            paths = find_component_paths_in_routes(file_path)
+            result.update(paths)
+    return result
 
 # Main function to search files
 def search_in_files(dir):
@@ -168,6 +171,7 @@ results, method_details = search_in_files(angular_dir)
 
 method_usages = find_method_usages(angular_dir, method_details.keys())
 final_results = {}
+paths_dict = find_component_paths_in_routes(angular_dir)
 
 for method, details in method_details.items():
     end_components = track_method_usages(method_details, method_usages, method, angular_dir)
@@ -178,7 +182,7 @@ for method, details in method_details.items():
             component_name_match = re.search(r'export\s+class\s+(\w+)\s+', open(component_file).read())
             component_name = component_name_match.group(1) if component_name_match else None
             if component_name:
-                route_path = find_component_path_in_routes(component_name, angular_dir)
+                route_path = paths_dict[component_name]
                 component_results.append((component_name, route_path))
 
     final_results[method] = {
@@ -186,16 +190,5 @@ for method, details in method_details.items():
         'components': component_results
     }
 
-# Display results
-if final_results:
-    for method, details in final_results.items():
-        print "URL: {}".format(details['url'])
-        print "USAGE:"
-        for component, path in details['components']:
-            print "  component: {}".format(component)
-            print "  path: \"{}\"".format(path)
-        print '\n--------------------------------------------------------------\n'
-else:
-    print 'No apiService calls found.'
 
 ```
